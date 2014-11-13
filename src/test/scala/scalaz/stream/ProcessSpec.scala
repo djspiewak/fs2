@@ -323,4 +323,12 @@ object ProcessSpec extends Properties("Process") {
 
   }
 
+  property("order onPreHalt finalizers ahead of onComplete") = secure {
+    val p = empty onComplete Process.eval(Task now 1) onPreHalt {
+      case End => Process(2)
+      case cause => Halt(cause)
+    }
+
+    p.runLog.run == Vector(2, 1)
+  }
 }

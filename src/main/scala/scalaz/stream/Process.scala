@@ -111,6 +111,23 @@ sealed trait Process[+F[_], +O]
      }
   }
 
+  /**
+   * When this `Process` halts, call `f` to produce the next state.
+   * Note that this function may be used to swallow or handle errors.
+   *
+   * This function differs from `onHalt` in that it defers pre-existing
+   * finalizers until *after* the specified finalizer is run.
+   */
+  final def onPreHalt[F2[x] >: F[x], O2 >: O](f: Cause => Process[F2, O2]): Process[F2, O2] = {
+     val next = (t: Cause) => Trampoline.delay(Try(f(t)))
+     this match {
+       case Append(h, stack) => Append(h, next +: stack)
+       case emt@Emit(_)      => Append(emt, Vector(next))
+       case awt@Await(_, _)  => Append(awt, Vector(next))
+       case hlt@Halt(rsn)    => Append(hlt, Vector(next))
+     }
+  }
+
 
   //////////////////////////////////////////////////////////////////////////////////////
   //
