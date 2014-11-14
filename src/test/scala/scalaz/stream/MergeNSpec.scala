@@ -183,4 +183,12 @@ object MergeNSpec extends Properties("mergeN") {
 
     merge.mergeN(stuff).runLog.run forall identity
   }
+
+  property("not freeze on a suspended process") = secure {
+    val source = suspend {
+      Process(Process(42))
+    }
+
+    merge.mergeN(source).runLast.run == Some(42)
+  }
 }
