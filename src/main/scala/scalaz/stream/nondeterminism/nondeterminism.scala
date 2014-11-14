@@ -41,6 +41,9 @@ package object nondeterminism {
       val q = async.boundedQueue[A](maxQueued)(S)
       val done = async.signal[Boolean](S)
 
+      // when we hit the end of the source stream, hang out and wait for everything else to finish
+      val suspension = async.signal[Boolean](S)
+
       //keep state of master source
       var state: Either3[Cause, EarlyCause => Unit,  Cont[Task,Process[Task,A]]] =
         Either3.left3(End)
@@ -101,6 +104,8 @@ package object nondeterminism {
           completer.foreach { cb =>  S(cb(\/-(()))) }
           completer = None
           closed = closed orElse Some(End)
+        } else if (suspension.get.run && opened <= 0) {
+          suspension.set(false).run
         }
       }
 
@@ -173,8 +178,19 @@ package object nondeterminism {
 
           // Start evaluation of the source.
           case Start =>
+            // we're not yet at the end, so we aren't (yet) in suspension
+            suspension.set(false).run
+
+            val suspendySource = source onPreHalt {
+              case End =>
+                (Process eval_ (suspension set true)) ++            // ok, we hit the end of the source
+                  (suspension.discrete takeWhile identity drain)    // wait here until opened <= 0
+
+              case cause => Halt(cause)
+            }
+
             // Assignment to `state` must be performed inside this actor to prevent races.
-            state = nextStep(source)
+            state = nextStep(suspendySource)
 
         })(rsn => m match {
           //join is closed, next p is ignored and source is killed

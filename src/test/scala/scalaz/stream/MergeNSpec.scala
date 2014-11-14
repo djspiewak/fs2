@@ -172,4 +172,15 @@ object MergeNSpec extends Properties("mergeN") {
     merge.mergeN(Process(Process.repeatEval(Task.now(1)))).kill.run.timed(3000).run
     true // Test terminates.
   }
+
+  property("run parent onComplete after all children have completed") = secure {
+    import java.util.concurrent.atomic.AtomicBoolean
+
+    val flag = new AtomicBoolean(false)
+
+    val stuff = Process(Process.eval(Task delay { Thread.sleep(200); !flag.get() })) onComplete
+    Process.eval_(Task delay { flag.set(true) })
+
+    merge.mergeN(stuff).runLog.run forall identity
+  }
 }
