@@ -4,9 +4,9 @@ name := "scalaz-stream"
 
 version := "snapshot-0.7"
 
-scalaVersion := "2.10.4"
+scalaVersion := "2.11.5"
 
-crossScalaVersions := Seq("2.10.4", "2.11.4")
+crossScalaVersions := Seq("2.10.4", "2.11.5")
 
 scalacOptions ++= Seq(
   "-feature",
