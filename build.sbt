@@ -1,71 +1,77 @@
-organization := "org.scalaz.stream"
+def StreamProject(pName: String, base: Option[String] = None): Project =
+  Project(pName, file(base getOrElse pName))
+    .settings(bintraySettings: _*)
+    .settings(osgiSettings: _*)
+    .settings(doctestSettings: _*)
+    .settings(
+      organization := "org.scalaz.stream",
 
-name := "scalaz-stream"
+      // required for maven artifact id backward compatibility
+      name := (pName match {
+        case "root" => "root"
+        case "core" => "scalaz-stream"
+        case x => s"scalaz-stream-$x"
+      }),   // also, don't delete the parentheses. god only knows why SBT needs them...
 
-version := "snapshot-0.7"
+      version := "snapshot-0.7",
 
-scalaVersion := "2.11.5"
+      scalaVersion := "2.11.5",
+      crossScalaVersions := Seq("2.10.4", "2.11.5"),
 
-crossScalaVersions := Seq("2.10.4", "2.11.5")
+      scalacOptions ++= Seq(
+        "-feature",
+        "-deprecation",
+        "-language:implicitConversions",
+        "-language:higherKinds",
+        "-language:existentials",
+        "-language:postfixOps",
+        // "-Xfatal-warnings", // this makes cross compilation impossible from a single source
+        "-Yno-adapted-args"),
 
-scalacOptions ++= Seq(
-  "-feature",
-  "-deprecation",
-  "-language:implicitConversions",
-  "-language:higherKinds",
-  "-language:existentials",
-  "-language:postfixOps",
-  // "-Xfatal-warnings", // this makes cross compilation impossible from a single source
-  "-Yno-adapted-args"
-)
+      scalacOptions in (Compile, doc) ++= Seq(
+        "-doc-source-url", scmInfo.value.get.browseUrl + "/tree/master€{FILE_PATH}.scala",
+        "-sourcepath", baseDirectory.in(LocalRootProject).value.getAbsolutePath),
 
-scalacOptions in (Compile, doc) ++= Seq(
-  "-doc-source-url", scmInfo.value.get.browseUrl + "/tree/master€{FILE_PATH}.scala",
-  "-sourcepath", baseDirectory.in(LocalRootProject).value.getAbsolutePath
-)
+      resolvers ++= Seq(Resolver.sonatypeRepo("releases"), Resolver.sonatypeRepo("snapshots")),
 
-resolvers ++= Seq(Resolver.sonatypeRepo("releases"), Resolver.sonatypeRepo("snapshots"))
+      libraryDependencies ++= Seq(
+        "org.scalaz" %% "scalaz-core"       % "7.0.6",
+        "org.scalaz" %% "scalaz-concurrent" % "7.0.6",
 
-libraryDependencies ++= Seq(
-  "org.scalaz" %% "scalaz-core" % "7.0.6",
-  "org.scalaz" %% "scalaz-concurrent" % "7.0.6",
-  "org.scodec" %% "scodec-bits" % "1.0.5",
-  "org.scalaz" %% "scalaz-scalacheck-binding" % "7.0.6" % "test",
-  "org.scalacheck" %% "scalacheck" % "1.12.1" % "test"
-)
+        "org.scalaz"     %% "scalaz-scalacheck-binding" % "7.0.6"  % "test",
+        "org.scalacheck" %% "scalacheck"                % "1.12.1" % "test"),
 
-seq(bintraySettings:_*)
+      publishMavenStyle := true,
 
-publishMavenStyle := true
+      licenses += ("MIT", url("http://opensource.org/licenses/MIT")),
 
-licenses += ("MIT", url("http://opensource.org/licenses/MIT"))
+      scmInfo := Some(ScmInfo(url("https://github.com/scalaz/scalaz-stream"),
+        "git@github.com:scalaz/scalaz-stream.git")),
 
-scmInfo := Some(ScmInfo(url("https://github.com/scalaz/scalaz-stream"),
-  "git@github.com:scalaz/scalaz-stream.git"))
+      bintray.Keys.packageLabels in bintray.Keys.bintray :=
+        Seq("stream processing", "functional I/O", "iteratees", "functional programming", "scala"),
 
-bintray.Keys.packageLabels in bintray.Keys.bintray :=
-  Seq("stream processing", "functional I/O", "iteratees", "functional programming", "scala")
+      OsgiKeys.bundleSymbolicName := "org.scalaz.stream",
+      OsgiKeys.exportPackage := Seq("scalaz.stream.*"),
+      OsgiKeys.importPackage := Seq(
+        """scala.*;version="$<range;[===,=+);$<@>>"""",
+        """scalaz.*;version="$<range;[===,=+);$<@>>"""",
+        "*"),
 
-osgiSettings
+      parallelExecution in Test := false,
 
-OsgiKeys.bundleSymbolicName := "org.scalaz.stream"
+      autoAPIMappings := true,
+      apiURL := Some(url(s"http://docs.typelevel.org/api/scalaz-stream/stable/${version.value}/doc/")),
 
-OsgiKeys.exportPackage := Seq("scalaz.stream.*")
+      initialCommands := "import scalaz.stream._",
 
-OsgiKeys.importPackage := Seq(
-  """scala.*;version="$<range;[===,=+);$<@>>"""",
-  """scalaz.*;version="$<range;[===,=+);$<@>>"""",
-  "*"
-)
+      doctestWithDependencies := false)
 
-parallelExecution in Test := false
+// projects
 
-autoAPIMappings := true
+lazy val root: Project = StreamProject("root", Some("."))
+  .aggregate(core)
+  .settings(
+    publishArtifact in Compile := false)
 
-apiURL := Some(url(s"http://docs.typelevel.org/api/scalaz-stream/stable/${version.value}/doc/"))
-
-initialCommands := "import scalaz.stream._"
-
-doctestWithDependencies := false
-
-doctestSettings
+lazy val core: Project = StreamProject("core")
