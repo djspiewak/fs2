@@ -299,6 +299,10 @@ object ProcessSpec extends Properties("Process") {
     Process.constant(0).toStream.take(10).toList === List.fill(10)(0)
   }
 
+  property("Process0Syntax.toIterator returns elements in order") = forAll { xs: List[List[Int]] =>
+    (Process emitAll xs flatMap Process.emitAll).toIterator.toList == xs.flatten
+  }
+
   property("SinkSyntax.toChannel") = forAll { p0: Process0[Int] =>
     val buffer = new collection.mutable.ListBuffer[Int]
     val channel = io.fillBuffer(buffer).toChannel

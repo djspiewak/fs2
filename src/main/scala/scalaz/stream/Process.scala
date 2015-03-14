@@ -1032,7 +1032,7 @@ object Process extends ProcessInstances {
   /**
    * This class provides infix syntax specific to `Process0`.
    */
-  implicit class Process0Syntax[O](val self: Process0[O]) extends AnyVal {
+  implicit class Process0Syntax[O](self: Process0[O]) {     // TODO convert back into a value class when 2.10 has fewer bugs...
 
     /** Converts this `Process0` to a `Vector`. */
     def toVector: Vector[O] =
@@ -1051,18 +1051,67 @@ object Process extends ProcessInstances {
     def toSeq: Seq[O] = toVector
 
     /** Converts this `Process0` to a `Stream`. */
-    def toStream: Stream[O] = {
-      def go(p: Process0[O]): Stream[O] =
-        p.step match {
-          case s: Step[Nothing, O] =>
-            s.head match {
-              case Emit(os) => os.toStream #::: go(s.next.continue)
-              case _ => sys.error("impossible")
-            }
-          case Halt(Error(rsn)) => throw rsn
-          case Halt(_) => Stream.empty
+    def toStream: Stream[O] = toIterator.toStream
+
+    def toIterator: Iterator[O] = new Iterator[O] {
+      private var state: Process0[O] = self
+
+      private var index: Int = 0
+      private var chunk: Seq[O] = Nil
+
+      @tailrec
+      def hasNext: Boolean = {
+        if (index >= chunk.length) {
+          if (state.isHalt) {
+            false
+          } else {
+            read()
+            hasNext
+          }
+        } else {
+          true
         }
-      go(self)
+      }
+
+      @tailrec
+      def next(): O = {
+        if (index >= chunk.length) {
+          if (state.isHalt) {
+            throw Terminated(End)
+          } else {
+            read()
+            next()
+          }
+        } else {
+          val back = chunk(index)
+          index += 1
+          back
+        }
+      }
+
+      @tailrec
+      private def read(): Unit = {
+        state.step match {
+          case h @ Halt(_) => {
+            index = 0
+            chunk = Nil
+            state = h
+          }
+
+          case s: Step[Nothing, O] => {
+            val Emit(chunk2) = s.head
+            val cont = s.next
+
+            index = 0
+            chunk = chunk2
+            state = cont.continue
+
+            if (index >= chunk.length) {
+              read()
+            }
+          }
+        }
+      }
     }
 
     /** Converts this `Process0` to a `Map`. */
