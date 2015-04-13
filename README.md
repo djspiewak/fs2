@@ -9,17 +9,17 @@ scalaz-stream
 To get the latest version of the library, add the following to your SBT build:
 
 ``` scala
-resolvers += "Scalaz Bintray Repo" at "http://dl.bintray.com/scalaz/releases"
+resolvers += "Scalaz Bintray Repo" at "https://dl.bintray.com/scalaz/releases"
 ```
 
 And use one of the following library dependencies:
 
 ```
-// Against Scalaz 7.0.6, available for Scala 2.10.4 and 2.11.4
-libraryDependencies += "org.scalaz.stream" %% "scalaz-stream" % "0.6"
+// Against Scalaz 7.0.6, available for Scala 2.10.5 and 2.11.6
+libraryDependencies += "org.scalaz.stream" %% "scalaz-stream" % "0.7"
 
-// Against Scalaz 7.1, available for Scala 2.10.4 and 2.11.4
-libraryDependencies += "org.scalaz.stream" %% "scalaz-stream" % "0.6a"
+// Against Scalaz 7.1, available for Scala 2.10.5 and 2.11.6
+libraryDependencies += "org.scalaz.stream" %% "scalaz-stream" % "0.7a"
 ```
 
 ### About the library ###
@@ -65,7 +65,6 @@ Blog posts and other external resources are listed on the [Additional Resources]
 If you have a project you'd like to include in this list, send a message to the [scalaz mailing list](https://groups.google.com/forum/#!forum/scalaz) and we'll add a link to it here.
 
 * [http4s](http://www.http4s.org): Minimal, idiomatic Scala interface for HTTP services using scalaz-stream
-* [scalaz-stream-mongodb](https://github.com/Spinoco/scalaz-stream-mongodb): Bindings to [MongoDB](http://www.mongodb.org/) that use scalaz-stream
 * [scodec-stream](https://github.com/scodec/scodec-stream): A library for streaming binary decoding and encoding, built using scalaz-stream and [scodec](https://github.com/scodec/scodec)
 * [streamz](https://github.com/krasserm/streamz): A library that allows a `Process` to consume from and produce to [Apache Camel](http://camel.apache.org/) endpoints, [Akka Persistence](http://doc.akka.io/docs/akka/2.3.5/scala/persistence.html) journals and snapshot stores and [Akka Stream](http://akka.io/docs/#akka-streams-and-http) flows (reactive streams) with full back-pressure support.
 

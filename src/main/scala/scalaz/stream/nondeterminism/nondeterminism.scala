@@ -36,7 +36,11 @@ package object nondeterminism {
 
 
     suspend {
-      val q = async.boundedQueue[A](maxQueued)(S)
+      val q = if (maxQueued > 0)
+        async.boundedQueue[A](maxQueued)(S)
+      else
+        async.unboundedQueue[A](S)
+
       val done = async.signalOf(false)(S)
 
       //keep state of master source
@@ -187,9 +191,18 @@ package object nondeterminism {
           case Offer(_, cont) => nextStep(Halt(Kill) +: cont)
           case FinishedSource(cause) => state = Either3.left3(cause) ; completeIfDone
           case Finished(_) => opened = opened - 1; completeIfDone
-          case FinishedDown(cb) =>
-            if (allDone) S(cb(\/-(())))
-            else completer = Some(cb)
+
+          case FinishedDown(cb) => {
+            if (allDone)
+              S(cb(\/-(())))
+            else {
+              // this dance is symetrical with what we do in wye.apply handling multiple DownDone messages
+              completer = completer map { cb0 =>
+                { v: (Throwable \/ Unit) => cb0(v); cb(v) }
+              } orElse Some(cb)     // this case shouldn't ever happen
+            }
+          }
+
           case Start => ()
           case Delay(cont) => nextStep(cont.continue)
         })
@@ -197,8 +210,7 @@ package object nondeterminism {
       })
 
 
-      (eval_(start) ++ q.dequeue)
-      .onComplete(eval_(Task.async[Unit] { cb => actor ! FinishedDown(cb) }))
+      (eval_(start) ++ q.dequeue) onComplete eval_(Task.async[Unit] { cb => actor ! FinishedDown(cb) })
     }
 
   }

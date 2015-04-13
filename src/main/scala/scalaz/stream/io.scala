@@ -27,7 +27,7 @@ object io {
   def bufferedResource[F[_],R,O](acquire: F[R])(
                             flushAndRelease: R => F[O])(
                             step: R => F[O]): Process[F,O] =
-    eval(acquire).flatMap { r =>
+    await(acquire) { r =>
       repeatEval(step(r)).onComplete(eval(flushAndRelease(r)))
     }
 
@@ -48,10 +48,6 @@ object io {
         }
     }
   }
-
-  /** Promote an effectful function to a `Channel`. */
-  def channel[F[_],A,B](f: A => F[B]): Channel[F, A, B] =
-    Process.constant(f)
 
   /**
    * Creates a `Channel[Task,Int,ByteVector]` from an `InputStream` by
@@ -93,7 +89,7 @@ object io {
 
   /** A `Sink` which, as a side effect, adds elements to the given `Buffer`. */
   def fillBuffer[A](buf: collection.mutable.Buffer[A]): Sink[Task,A] =
-    channel((a: A) => Task.delay { buf += a })
+    channel.lift((a: A) => Task.delay { buf += a })
 
   /**
    * Creates a `Process[Task,String]` from the lines of a file, using
@@ -127,7 +123,7 @@ object io {
    * specific side effects on that `PrintStream`.
    */
   def printStreamSink[O](out: PrintStream)(f: (PrintStream, O) => Unit): Sink[Task, O] =
-    channel((o: O) => Task.delay {
+    channel.lift((o: O) => Task.delay {
       f(out, o)
       if (out.checkError)
         throw Cause.Terminated(Cause.End)
@@ -154,7 +150,7 @@ object io {
   def resource[F[_],R,O](acquire: F[R])(
                          release: R => F[Unit])(
                          step: R => F[O]): Process[F,O] =
-    eval(acquire).flatMap { r =>
+    await(acquire) { r =>
       repeatEval(step(r)).onComplete(eval_(release(r)))
     }
 

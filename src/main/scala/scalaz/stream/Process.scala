@@ -1,7 +1,5 @@
 package scalaz.stream
 
-import java.util.concurrent.atomic.AtomicReference
-
 import Cause._
 
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
@@ -9,6 +7,7 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 import scala.annotation.tailrec
 import scala.collection.SortedMap
 import scala.concurrent.duration._
+import scalaz.stream.async.immutable.Signal
 import scalaz.{\/-, Catchable, Functor, Monad, Monoid, Nondeterminism, \/, -\/, ~>}
 import scalaz.\/._
 import scalaz.concurrent.{Actor, Future, Strategy, Task}
@@ -723,6 +722,10 @@ object Process extends ProcessInstances {
   def await1[I]: Process1[I, I] =
     receive1(emit)
 
+  /** `Writer` based version of `await1`. */
+  def await1W[A]: Writer1[Nothing, A, A] =
+    writer.liftO(Process.await1[A])
+
   /** Like `await1`, but consults `fb` when await fails to receive an `I` */
   def await1Or[I](fb: => Process1[I, I]): Process1[I, I] =
     receive1Or(fb)(emit)
@@ -731,64 +734,25 @@ object Process extends ProcessInstances {
   def awaitBoth[I, I2]: Wye[I, I2, ReceiveY[I, I2]] =
     await(Both[I, I2])(emit)
 
+  /** `Writer` based version of `awaitBoth`. */
+  def awaitBothW[I, I2]: WyeW[Nothing, I, I2, ReceiveY[I, I2]] =
+    writer.liftO(Process.awaitBoth[I, I2])
+
   /** The `Tee` which requests from the left branch, emits this value, then halts. */
   def awaitL[I]: Tee[I, Any, I] =
     await(L[I])(emit)
+
+  /** `Writer` based version of `awaitL`. */
+  def awaitLW[I]: TeeW[Nothing, I, Any, I] =
+    writer.liftO(Process.awaitL[I])
 
   /** The `Tee` which requests from the right branch, emits this value, then halts. */
   def awaitR[I2]: Tee[Any, I2, I2] =
     await(R[I2])(emit)
 
-  /** The `Process` which emits the single value given, then halts. */
-  def emit[O](o: O): Process0[O] = Emit(Vector(o))
-
-  /** The `Process` which emits the given sequence of values, then halts. */
-  def emitAll[O](os: Seq[O]): Process0[O] = Emit(os)
-
-  /** The `Process` which emits no values and halts immediately with the given exception. */
-  def fail(rsn: Throwable): Process0[Nothing] = Halt(Error(rsn))
-
-  /** `halt` but with precise type. */
-  private[stream] val halt0: Halt = Halt(End)
-
-  /** The `Process` which emits no values and signals normal termination. */
-  val halt: Process0[Nothing] = halt0
-
-  /** Alias for `halt`. */
-  def empty[F[_],O]: Process[F, O] = halt
-
-  /**
-   * The `Process1` which awaits a single input and passes it to `rcv` to
-   * determine the next state.
-   */
-  def receive1[I, O](rcv: I => Process1[I, O]): Process1[I, O] =
-    await(Get[I])(rcv)
-
-  /** Like `receive1`, but consults `fb` when it fails to receive an input. */
-  def receive1Or[I, O](fb: => Process1[I, O])(rcv: I => Process1[I, O]): Process1[I, O] =
-    awaitOr(Get[I])((rsn: EarlyCause) => fb.causedBy(rsn))(rcv)
-
-  ///////////////////////////////////////////////////////////////////////////////////////
-  //
-  // CONSTRUCTORS -> Helpers
-  //
-  //////////////////////////////////////////////////////////////////////////////////////
-
-  /** `Writer` based version of `await1`. */
-  def await1W[A]: Writer1[Nothing, A, A] =
-    liftW(Process.await1[A])
-
-  /** `Writer` based version of `awaitL`. */
-  def awaitLW[I]: TeeW[Nothing, I, Any, I] =
-    liftW(Process.awaitL[I])
-
   /** `Writer` based version of `awaitR`. */
   def awaitRW[I2]: TeeW[Nothing, Any, I2, I2] =
-    liftW(Process.awaitR[I2])
-
-  /** `Writer` based version of `awaitBoth`. */
-  def awaitBothW[I, I2]: WyeW[Nothing, I, I2, ReceiveY[I, I2]] =
-    liftW(Process.awaitBoth[I, I2])
+    writer.liftO(Process.awaitR[I2])
 
   /**
    * The infinite `Process`, always emits `a`.
@@ -802,13 +766,22 @@ object Process extends ProcessInstances {
     go
   }
 
+  /** The `Process` which emits the single value given, then halts. */
+  def emit[O](o: O): Process0[O] = Emit(Vector(o))
+
+  /** The `Process` which emits the given sequence of values, then halts. */
+  def emitAll[O](os: Seq[O]): Process0[O] = Emit(os)
+
   /** A `Writer` which emits one value to the output. */
   def emitO[O](o: O): Process0[Nothing \/ O] =
-    Process.emit(right(o))
+    emit(right(o))
 
   /** A `Writer` which writes the given value. */
   def emitW[W](s: W): Process0[W \/ Nothing] =
-    Process.emit(left(s))
+    emit(left(s))
+
+  /** The `Process` which emits no values and halts immediately with the given exception. */
+  def fail(rsn: Throwable): Process0[Nothing] = Halt(Error(rsn))
 
   /** A `Process` which emits `n` repetitions of `a`. */
   def fill[A](n: Int)(a: A, chunkSize: Int = 1): Process0[A] = {
@@ -828,6 +801,15 @@ object Process extends ProcessInstances {
   def forwardFill[A](p: Process[Task, A])(implicit S: Strategy): Process[Task, A] =
     async.toSignal(p).continuous
 
+  /** `halt` but with precise type. */
+  private[stream] val halt0: Halt = Halt(End)
+
+  /** The `Process` which emits no values and signals normal termination. */
+  val halt: Process0[Nothing] = halt0
+
+  /** Alias for `halt`. */
+  def empty[F[_],O]: Process[F, O] = halt
+
   /**
    * An infinite `Process` that repeatedly applies a given function
    * to a start value. `start` is the first value emitted, followed
@@ -842,17 +824,6 @@ object Process extends ProcessInstances {
    */
   def iterateEval[F[_], A](start: A)(f: A => F[A]): Process[F, A] =
     emit(start) ++ await(f(start))(iterateEval(_)(f))
-
-  /** Promote a `Process` to a `Writer` that writes nothing. */
-  def liftW[F[_], A](p: Process[F, A]): Writer[F, Nothing, A] =
-    p.map(right)
-
-  /**
-   * Promote a `Process` to a `Writer` that writes and outputs
-   * all values of `p`.
-   */
-  def logged[F[_], A](p: Process[F, A]): Writer[F, A, A] =
-    p.flatMap(a => emitAll(Vector(left(a), right(a))))
 
   /** Lazily produce the range `[start, stopExclusive)`. If you want to produce the sequence in one chunk, instead of lazily, use `emitAll(start until stopExclusive)`.  */
   def range(start: Int, stopExclusive: Int, by: Int = 1): Process0[Int] =
@@ -879,6 +850,17 @@ object Process extends ProcessInstances {
           None
     }
   }
+
+  /**
+   * The `Process1` which awaits a single input and passes it to `rcv` to
+   * determine the next state.
+   */
+  def receive1[I, O](rcv: I => Process1[I, O]): Process1[I, O] =
+    await(Get[I])(rcv)
+
+  /** Like `receive1`, but consults `fb` when it fails to receive an input. */
+  def receive1Or[I, O](fb: => Process1[I, O])(rcv: I => Process1[I, O]): Process1[I, O] =
+    awaitOr(Get[I])((rsn: EarlyCause) => fb.causedBy(rsn))(rcv)
 
   /**
    * Delay running `p` until `awaken` becomes true for the first time.
@@ -968,22 +950,37 @@ object Process extends ProcessInstances {
   /////////////////////////////////////////////////////////////////////////////////////
 
   /** Adds syntax for `Channel`. */
-  implicit class ChannelSyntax[F[_],I,O](val self: Channel[F,I,O]) extends AnyVal {
-    /** Transform the input of this `Channel`. */
-    def contramap[I0](f: I0 => I): Channel[F,I0,O] =
-      self.map(f andThen _)
+  implicit def toChannelSyntax[F[_], I, O](self: Channel[F, I, O]): ChannelSyntax[F, I, O] =
+    new ChannelSyntax(self)
 
-    /** Transform the output of this `Channel` */
-    def mapOut[O2](f: O => O2)(implicit F: Functor[F]): Channel[F,I,O2] =
-      self.map(_ andThen F.lift(f))
-  }
+  /** Adds syntax for `Process1`. */
+  implicit def toProcess1Syntax[I, O](self: Process1[I, O]): Process1Syntax[I, O] =
+    new Process1Syntax(self)
 
   /** Adds syntax for `Sink`. */
-  implicit class SinkSyntax[F[_],I](val self: Sink[F,I]) extends AnyVal {
-    /** Converts `Sink` to `Channel`, that will perform the side effect and echo its input. */
-    def toChannel(implicit F: Functor[F]): Channel[F,I,I] =
-      self.map(f => (i: I) => F.map(f(i))(_ => i))
-  }
+  implicit def toSinkSyntax[F[_], I](self: Sink[F, I]): SinkSyntax[F, I] =
+    new SinkSyntax(self)
+
+  /** Adds syntax for `Sink` that is specialized for Task. */
+  implicit def toSinkTaskSyntax[F[_], I](self: Sink[Task, I]): SinkTaskSyntax[I] =
+    new SinkTaskSyntax(self)
+
+  /** Adds syntax for `Tee`. */
+  implicit def toTeeSyntax[I, I2, O](self: Tee[I, I2, O]): TeeSyntax[I, I2, O] =
+    new TeeSyntax(self)
+
+  /** Adds syntax for `Writer`. */
+  implicit def toWriterSyntax[F[_], W, O](self: Writer[F, W, O]): WriterSyntax[F, W, O] =
+    new WriterSyntax(self)
+
+  /** Adds syntax for `Writer` that is specialized for Task. */
+  implicit def toWriterTaskSyntax[W, O](self: Writer[Task, W, O]): WriterTaskSyntax[W, O] =
+    new WriterTaskSyntax(self)
+
+  /** Adds syntax for `Wye`. */
+  implicit def toWyeSyntax[I, I2, O](self: Wye[I, I2, O]): WyeSyntax[I, I2, O] =
+    new WyeSyntax(self)
+
 
   implicit class ProcessSyntax[F[_],O](val self: Process[F,O]) extends AnyVal {
     /** Feed this `Process` through the given effectful `Channel`. */
@@ -1095,98 +1092,32 @@ object Process extends ProcessInstances {
     def liftIO: Process[Task, O] = self
   }
 
-  /** Syntax for Sink, that is specialized for Task */
-  implicit class SinkTaskSyntax[I](val self: Sink[Task,I]) extends AnyVal {
-    /** converts sink to sink that first pipes received `I0` to supplied p1 */
-    def pipeIn[I0](p1: Process1[I0, I]): Sink[Task, I0] = Process.suspend {
-      import scalaz.Scalaz._
-      // Note: Function `f` from sink `self` may be used for more than 1 element emitted by `p1`.
-      @volatile var cur = p1.step
-      @volatile var lastF: Option[I => Task[Unit]] = None
-      self.takeWhile { _ =>
-        cur match {
-          case Halt(Cause.End) => false
-          case Halt(cause)     => throw new Cause.Terminated(cause)
-          case _               => true
-        }
-      } map { (f: I => Task[Unit]) =>
-        lastF = f.some
-        (i0: I0) => Task.suspend {
-          cur match {
-            case Halt(_) => sys.error("Impossible")
-            case Step(Emit(piped), cont) =>
-              cur = process1.feed1(i0) { cont.continue }.step
-              piped.toList.traverse_(f)
-            case Step(hd, cont) =>
-              val (piped, tl) = process1.feed1(i0)(hd +: cont).unemit
-              cur = tl.step
-              piped.toList.traverse_(f)
-          }
-        }
-      } onHalt {
-        case Cause.Kill =>
-          lastF map { f =>
-            cur match {
-              case Halt(_) => sys.error("Impossible (2)")
-              case s@Step(_, _) =>
-                s.toProcess.disconnect(Cause.Kill).evalMap(f).drain
-            }
-          } getOrElse Halt(Cause.Kill)
-        case Cause.End  => halt
-        case c@Cause.Error(_) => halt.causedBy(c)
-      }
-    }
-  }
-
-
-  /**
-   * This class provides infix syntax specific to `Process1`.
-   */
-  implicit class Process1Syntax[I,O](val self: Process1[I,O]) extends AnyVal {
-
-    /** Apply this `Process` to an `Iterable`. */
-    def apply(input: Iterable[I]): IndexedSeq[O] =
-      Process(input.toSeq: _*).pipe(self).toIndexedSeq
-
-    /**
-     * Transform `self` to operate on the left hand side of an `\/`, passing
-     * through any values it receives on the right. Note that this halts
-     * whenever `self` halts.
-     */
-    def liftL[I2]: Process1[I \/ I2, O \/ I2] =
-      process1.liftL(self)
-
-    /**
-     * Transform `self` to operate on the right hand side of an `\/`, passing
-     * through any values it receives on the left. Note that this halts
-     * whenever `self` halts.
-     */
-    def liftR[I0]: Process1[I0 \/ I, I0 \/ O] =
-      process1.liftR(self)
-
-    /**
-     * Feed a single input to this `Process1`.
-     */
-    def feed1(i: I): Process1[I,O] =
-      process1.feed1(i)(self)
-
-    /** Transform the input of this `Process1`. */
-    def contramap[I2](f: I2 => I): Process1[I2,O] =
-      process1.lift(f).pipe(self)
-  }
-
-
   /**
    * Syntax for processes that have its effects wrapped in Task
    */
   implicit class SourceSyntax[O](val self: Process[Task, O])   extends WyeOps[O] {
+
+    /** converts process to signal **/
+    def toSignal(implicit S:Strategy):Signal[O] =
+      async.toSignal(self)
 
     /**
      * Produce a continuous stream from a discrete stream by using the
      * most recent value.
      */
     def forwardFill(implicit S: Strategy): Process[Task, O] =
-      async.toSignal(self).continuous
+      self.toSignal.continuous
+
+    /**
+     * Returns result of channel evaluation tupled with
+     * original value passed to channel.
+     **/
+    def observeThrough[O2](ch: Channel[Task, O, O2]): Process[Task, (O, O2)] = {
+      val observerCh = ch map { f =>
+        o: O => f(o) map { o2 => o -> o2 }
+      }
+      self through observerCh
+    }
 
     /**
      * Asynchronous stepping of this Process. Note that this method is not resource safe unless
@@ -1241,6 +1172,8 @@ object Process extends ProcessInstances {
             case Step(awt: Await[Task, a, O], cont) => {
               val Await(req, rcv) = awt
 
+              case class PreStepAbort(c: EarlyCause) extends RuntimeException
+
               def unpack(msg: Option[Throwable \/ a]): Option[Process[Task, O]] = msg map { r => Try(rcv(EarlyCause fromTaskResult r).run) }
 
               // throws an exception if we're already interrupted (caught in preStep check)
@@ -1253,7 +1186,7 @@ object Process extends ProcessInstances {
                       checkInterrupt(int)
                   }
 
-                  case \/-(c) => Task fail Terminated(c)
+                  case \/-(c) => Task fail PreStepAbort(c)
                 }
               } join
 
@@ -1275,7 +1208,7 @@ object Process extends ProcessInstances {
                     completed: Process[Task, O] => Unit)(result: Option[Throwable \/ a]): Unit = result match {
 
                   // interrupted via the `Task.fail` defined in `checkInterrupt`
-                  case Some(-\/(Terminated(cause: EarlyCause))) => preStep(cause)
+                  case Some(-\/(PreStepAbort(cause: EarlyCause))) => preStep(cause)
 
                   case result => {
                     val inter = interrupted.get().toOption
@@ -1466,157 +1399,6 @@ object Process extends ProcessInstances {
 
       { () => actor ! None }
     }
-  }
-
-  /**
-   * This class provides infix syntax specific to `Tee`. We put these here
-   * rather than trying to cram them into `Process` itself using implicit
-   * equality witnesses. This doesn't work out so well due to variance
-   * issues.
-   */
-  implicit class TeeSyntax[I,I2,O](val self: Tee[I,I2,O]) extends AnyVal {
-
-    /** Transform the left input to a `Tee`. */
-    def contramapL[I0](f: I0 => I): Tee[I0,I2,O] =
-      self.contramapL_(f).asInstanceOf[Tee[I0,I2,O]]
-
-    /** Transform the right input to a `Tee`. */
-    def contramapR[I3](f: I3 => I2): Tee[I,I3,O] =
-      self.contramapR_(f).asInstanceOf[Tee[I,I3,O]]
-  }
-
-
-  /**
-   * Infix syntax for working with `Writer[F,W,O]`. We call
-   * the `W` parameter the 'write' side of the `Writer` and
-   * `O` the 'output' side. Many method in this class end
-   * with either `W` or `O`, depending on what side they
-   * operate on.
-   */
-  implicit class WriterSyntax[F[_],W,O](val self: Writer[F,W,O]) extends AnyVal {
-
-    /** Transform the write side of this `Writer`. */
-    def flatMapW[F2[x]>:F[x],W2,O2>:O](f: W => Writer[F2,W2,O2]): Writer[F2,W2,O2] =
-      self.flatMap(_.fold(f, emitO))
-
-    /** Remove the write side of this `Writer`. */
-    def stripW: Process[F,O] =
-      self.flatMap(_.fold(_ => halt, emit))
-
-    /** Map over the write side of this `Writer`. */
-    def mapW[W2](f: W => W2): Writer[F,W2,O] =
-      self.map(_.leftMap(f))
-
-    /** pipe Write side of this `Writer`  */
-    def pipeW[B](f: Process1[W,B]): Writer[F,B,O] =
-      self.pipe(process1.liftL(f))
-
-    /**
-     * Observe the write side of this `Writer` using the
-     * given `Sink`, keeping it available for subsequent
-     * processing. Also see `drainW`.
-     */
-    def observeW(snk: Sink[F,W]): Writer[F,W,O] =
-      self.zipWith(snk)((a,f) =>
-        a.fold(
-          (s: W) => eval_ { f(s) } ++ Process.emitW(s),
-          (a: O) => Process.emitO(a)
-        )
-      ).flatMap(identity)
-
-    /**
-     * Observe the write side of this `Writer` using the
-     * given `Sink`, then discard it. Also see `observeW`.
-     */
-    def drainW(snk: Sink[F,W]): Process[F,O] =
-      observeW(snk).stripW
-
-
-    /**
-     * Observe the output side of this `Writer` using the
-     * given `Sink`, keeping it available for subsequent
-     * processing. Also see `drainO`.
-     */
-    def observeO(snk: Sink[F,O]): Writer[F,W,O] =
-      self.map(_.swap).observeW(snk).map(_.swap)
-
-    /**
-     * Observe the output side of this Writer` using the
-     * given `Sink`, then discard it. Also see `observeW`.
-     */
-    def drainO(snk: Sink[F,O]): Process[F,W] =
-      observeO(snk).stripO
-
-    /** Map over the output side of this `Writer`. */
-    def mapO[B](f: O => B): Writer[F,W,B] =
-      self.map(_.map(f))
-
-    def flatMapO[F2[x]>:F[x],W2>:W,B](f: O => Writer[F2,W2,B]): Writer[F2,W2,B] =
-      self.flatMap(_.fold(emitW, f))
-
-    def stripO: Process[F,W] =
-      self.flatMap(_.fold(emit, _ => halt))
-
-    def pipeO[B](f: Process1[O,B]): Writer[F,W,B] =
-      self.pipe(process1.liftR(f))
-  }
-
-
-  /**
-   * This class provides infix syntax specific to `Wye`. We put these here
-   * rather than trying to cram them into `Process` itself using implicit
-   * equality witnesses. This doesn't work out so well due to variance
-   * issues.
-   */
-  implicit class WyeSyntax[I,I2,O](val self: Wye[I,I2,O]) extends AnyVal {
-
-    /**
-     * Apply a `Wye` to two `Iterable` inputs.
-     */
-    def apply(input: Iterable[I], input2: Iterable[I2]): IndexedSeq[O] = {
-      // this is probably rather slow
-      val src1 = Process.emitAll(input.toSeq).toSource
-      val src2 = Process.emitAll(input2.toSeq).toSource
-      src1.wye(src2)(self).runLog.run
-    }
-
-    /**
-     * Transform the left input of the given `Wye` using a `Process1`.
-     */
-    def attachL[I0](f: Process1[I0,I]): Wye[I0, I2, O] =
-      scalaz.stream.wye.attachL(f)(self)
-
-    /**
-     * Transform the right input of the given `Wye` using a `Process1`.
-     */
-    def attachR[I1](f: Process1[I1,I2]): Wye[I, I1, O] =
-     scalaz.stream.wye.attachR(f)(self)
-
-    /** Transform the left input to a `Wye`. */
-    def contramapL[I0](f: I0 => I): Wye[I0, I2, O] =
-      contramapL_(f)
-
-    /** Transform the right input to a `Wye`. */
-    def contramapR[I3](f: I3 => I2): Wye[I, I3, O] =
-      contramapR_(f)
-
-    private[stream] def contramapL_[I0](f: I0 => I): Wye[I0, I2, O] =
-      self.attachL(process1.lift(f))
-
-    private[stream] def contramapR_[I3](f: I3 => I2): Wye[I, I3, O] =
-      self.attachR(process1.lift(f))
-
-    /**
-     * Converting requests for the left input into normal termination.
-     * Note that `Both` requests are rewritten to fetch from the only input.
-     */
-    def detach1L: Wye[I,I2,O] =   scalaz.stream.wye.detach1L(self)
-
-    /**
-     * Converting requests for the left input into normal termination.
-     * Note that `Both` requests are rewritten to fetch from the only input.
-     */
-    def detach1R: Wye[I,I2,O] = scalaz.stream.wye.detach1R(self)
   }
 
   //////////////////////////////////////////////////////////////////////////////////////
