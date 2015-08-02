@@ -11,6 +11,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import Process._
 import scalaz.\/._
 
+import scala.concurrent.SyncVar
 
 class ResourceSafetySpec extends Properties("resource-safety") {
 
@@ -93,14 +94,14 @@ class ResourceSafetySpec extends Properties("resource-safety") {
   }
 
   property("cleanups for combination of wye, tee and pipe") = forAll { xs: List[Boolean] =>
-    val acquired = new AtomicInteger(0)
-    val released = new AtomicInteger(0)
+    val acquired = new SyncVar[Unit]
+    val released = new SyncVar[Unit]
 
     Process.emitAll(xs).wye(
       for {
         thing <- {
-          val acquire = Task.delay[Unit] { acquired.incrementAndGet() }
-          val release = Task.delay[Unit] { released.incrementAndGet() }
+          val acquire = Task delay { acquired.put(()) }
+          val release = Task delay { released.put(()) }
 
           io.resource(acquire)(x => release)(Task.now)
         }
@@ -108,6 +109,9 @@ class ResourceSafetySpec extends Properties("resource-safety") {
       } yield y
     )(wye.interrupt).run.run
 
-    (acquired.get() == released.get()) :| "acquired and released counters match"
+    val resolvedAcquired = acquired.get(3000).isDefined
+    val resolvedReleased = released.get(3000).isDefined
+
+    (!resolvedAcquired || resolvedReleased) :| s"acquired ($resolvedAcquired) did not imply released ($resolvedReleased)"
   }
 }
