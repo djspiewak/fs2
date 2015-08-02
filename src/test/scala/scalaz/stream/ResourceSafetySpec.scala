@@ -1,13 +1,14 @@
 package scalaz.stream
 
+import java.util.concurrent.atomic.AtomicInteger
+
 import Cause._
 import org.scalacheck._
 import Prop._
 
 import scalaz.concurrent.Task
-import java.util.concurrent.{ConcurrentLinkedQueue, LinkedBlockingDeque}
+import java.util.concurrent.ConcurrentLinkedQueue
 import Process._
-import scalaz.-\/
 import scalaz.\/._
 
 
@@ -31,7 +32,6 @@ class ResourceSafetySpec extends Properties("resource-safety") {
   val boom = new java.lang.Exception("boom!")
 
   def die = throw bwah
-
 
   property("cleanups") = protect {
     import Process._
@@ -90,5 +90,24 @@ class ResourceSafetySpec extends Properties("resource-safety") {
     var cleaned = false
     (emit(1) onComplete eval_(Task.delay(cleaned = true))).kill.kill.kill.expectedCause(_ == Kill).run.run
     cleaned
+  }
+
+  property("cleanups for combination of wye, tee and pipe") = forAll { xs: List[Boolean] =>
+    val acquired = new AtomicInteger(0)
+    val released = new AtomicInteger(0)
+
+    Process.emitAll(xs).wye(
+      for {
+        thing <- {
+          val acquire = Task.delay[Unit] { acquired.incrementAndGet() }
+          val release = Task.delay[Unit] { released.incrementAndGet() }
+
+          io.resource(acquire)(x => release)(Task.now)
+        }
+        y <- Process.emit(1).zip(Process.emit(2).pipe(process1.id[Int]))
+      } yield y
+    )(wye.interrupt).run.run
+
+    (acquired.get() == released.get()) :| "acquired and released counters match"
   }
 }
