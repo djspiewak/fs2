@@ -1,3 +1,9 @@
+import bintray.Keys._
+
+bintraySettings
+
+repository in bintray := "maven"
+
 organization := "org.scalaz.stream"
 
 name := "scalaz-stream"
@@ -23,8 +29,6 @@ scalacOptions in (Compile, doc) ++= Seq(
   "-doc-source-url", scmInfo.value.get.browseUrl + "/tree/master€{FILE_PATH}.scala",
   "-sourcepath", baseDirectory.in(LocalRootProject).value.getAbsolutePath
 )
-
-resolvers ++= Seq(Resolver.sonatypeRepo("releases"), Resolver.sonatypeRepo("snapshots"))
 
 libraryDependencies ++= Seq(
   "org.scalaz" %% "scalaz-core" % "7.1.3",
