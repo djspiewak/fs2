@@ -1455,12 +1455,10 @@ object Process extends ProcessInstances {
      * invoked at least once, and may be invoked twice.  If it is invoked twice, the first callback
      * will always be None while the second will be Some.
      *
-     *
+     * NOTE not actually interruptable anymore
      */
     private def completeInterruptibly[A](f: Future[A])(cb: Option[A] => Unit)(implicit S: Strategy): () => Unit = {
       import Future._
-
-      val cancel = new AtomicBoolean(false)
 
       // `cb` is run exactly once or twice
       // Case A) `cb` is run with `None` followed by `Some` if we were cancelled but still obtained a value.
@@ -1469,38 +1467,27 @@ object Process extends ProcessInstances {
       // Case D) the same as case A, but in the opposite order, only in very rare cases
       lazy val actor: Actor[Option[Future[A]]] = new Actor[Option[Future[A]]]({
         // pure cases
-        case Some(Suspend(thunk)) if !cancel.get() =>
+        case Some(Suspend(thunk)) =>
           actor ! Some(thunk())
 
-        case Some(BindSuspend(thunk, g)) if !cancel.get() =>
+        case Some(BindSuspend(thunk, g)) =>
           actor ! Some(thunk() flatMap g)
 
         case Some(Now(a)) => S { cb(Some(a)) }
 
-        case Some(Async(onFinish)) if !cancel.get() => {
+        case Some(Async(onFinish)) => {
           onFinish { a =>
             Trampoline delay { S { cb(Some(a)) } }
           }
         }
 
-        case Some(BindAsync(onFinish, g)) if !cancel.get() => {
+        case Some(BindAsync(onFinish, g)) => {
           onFinish { a =>
-            if (!cancel.get()) {
-              Trampoline delay { g(a) } map { r => actor ! Some(r) }
-            } else {
-              // here we drop `a` on the floor
-              Trampoline done { () }  // `cb` already run with `None`
-            }
+            Trampoline delay { g(a) } map { r => actor ! Some(r) }
           }
         }
 
-        // fallthrough case where cancel.get() == true
-        case Some(_) => ()  // `cb` already run with `None`
-
-        case None => {
-          cancel.set(true)  // the only place where `cancel` is set to `true`
-          S { cb(None) }
-        }
+        case None => S { cb(None) }
       })
 
       S { actor ! Some(f) }
