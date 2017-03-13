@@ -1,7 +1,9 @@
 package fs2.async.immutable
 
+import cats.Functor
+
 import fs2.Stream
-import fs2.util.{Async,Functor}
+import fs2.util.Async
 import fs2.async.immutable
 
 /** Data type of a single value of type `A` that can be read in the effect `F`. */

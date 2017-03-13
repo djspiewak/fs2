@@ -1,7 +1,8 @@
 package fs2
 
+import cats.Functor
 import fs2.{Pull => P}
-import fs2.util.{Async,Free,Functor,Sub1}
+import fs2.util.{Async,Free,Sub1}
 
 /** Generic implementations of common 2-argument pipes. */
 object pipe2 {

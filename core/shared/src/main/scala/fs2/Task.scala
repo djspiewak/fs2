@@ -498,6 +498,11 @@ private[fs2] trait TaskInstancesLowPriority {
   protected class EffectTask extends Effect[Task] {
     def pure[A](a: A) = Task.now(a)
     def flatMap[A,B](a: Task[A])(f: A => Task[B]): Task[B] = a flatMap f
+    def tailRecM[A,B](a: A)(f: A => Task[Either[A,B]]): Task[B] =
+      f(a).flatMap {
+        case Left(a) => tailRecM(a)(f)
+        case Right(b) => pure(b)
+      }
     override def delay[A](a: => A) = Task.delay(a)
     def suspend[A](fa: => Task[A]) = Task.suspend(fa)
     def fail[A](err: Throwable) = Task.fail(err)

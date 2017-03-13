@@ -2,17 +2,19 @@ package fs2
 package io
 package tcp
 
+import scala.concurrent.duration._
+
 import java.net.{StandardSocketOptions, InetSocketAddress, SocketAddress}
 import java.nio.ByteBuffer
 import java.nio.channels.spi.AsynchronousChannelProvider
 import java.nio.channels.{AsynchronousCloseException, AsynchronousServerSocketChannel, CompletionHandler, AsynchronousSocketChannel, AsynchronousChannelGroup}
 import java.util.concurrent.TimeUnit
 
+import cats.implicits._
+
 import fs2.Stream._
 import fs2.util.Async
 import fs2.util.syntax._
-
-import scala.concurrent.duration._
 
 /**
  * Provides the ability to read/write from a TCP socket in the effect `F`.

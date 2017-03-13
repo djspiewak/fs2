@@ -1,6 +1,8 @@
 package fs2
 package async
 
+import cats.implicits._
+
 import fs2.util.Async
 import fs2.util.syntax._
 

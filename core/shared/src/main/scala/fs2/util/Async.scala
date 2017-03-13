@@ -1,7 +1,8 @@
 package fs2
 package util
 
-import fs2.util.syntax._
+import cats.Traverse
+import cats.implicits._
 
 /**
  * Type class which describes effects that support asynchronous evaluation.
@@ -32,7 +33,7 @@ trait Async[F[_]] extends Effect[F] { self =>
 
   /** Like `traverse` but each `F[B]` computed from an `A` is evaluated in parallel. */
   def parallelTraverse[G[_],A,B](g: G[A])(f: A => F[B])(implicit G: Traverse[G]): F[G[B]] =
-    flatMap(G.traverse(g)(f andThen start)(self)) { _.sequence(G, self) }
+    flatMap(G.traverse(g)(f andThen start)(self)) { gfb => G.sequence(gfb)(self) }
 
   /** Like `sequence` but each `F[A]` is evaluated in parallel. */
   def parallelSequence[G[_],A](v: G[F[A]])(implicit G: Traverse[G]): F[G[A]] =

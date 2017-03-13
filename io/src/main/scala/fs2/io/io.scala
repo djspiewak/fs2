@@ -1,7 +1,8 @@
 package fs2
 
+import cats.implicits._
+
 import fs2.util.{Async, Suspendable}
-import fs2.util.syntax._
 import java.io.{InputStream, OutputStream}
 
 /** Provides various ways to work with streams that perform IO. */
@@ -26,7 +27,7 @@ package object io {
    */
   def readInputStreamAsync[F[_]](fis: F[InputStream], chunkSize: Int, closeAfterUse: Boolean = true)(implicit F: Async[F]): Stream[F, Byte] = {
     def readAsync(is: InputStream, buf: Array[Byte]) =
-      F.start(readBytesFromInputStream(is, buf)).flatMap(identity)
+      F.start(readBytesFromInputStream(is, buf)).flatten
 
     readInputStreamGeneric(fis, chunkSize, readAsync, closeAfterUse)
   }

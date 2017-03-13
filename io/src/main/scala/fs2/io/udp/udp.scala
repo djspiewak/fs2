@@ -1,11 +1,12 @@
 package fs2
 package io
 
+import cats.implicits._
+
 import java.net.{InetSocketAddress,NetworkInterface,ProtocolFamily,StandardSocketOptions}
 import java.nio.channels.DatagramChannel
 
 import fs2.util.Async
-import fs2.util.syntax._
 
 /** Provides support for UDP networking. */
 package object udp {

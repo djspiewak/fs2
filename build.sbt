@@ -168,7 +168,8 @@ lazy val root = project.in(file(".")).
 lazy val core = crossProject.in(file("core")).
   settings(commonSettings: _*).
   settings(
-    name := "fs2-core"
+    name := "fs2-core",
+    libraryDependencies += "org.typelevel" %%% "cats-core" % "0.9.0"
   ).
   jsSettings(commonJsSettings: _*)
 

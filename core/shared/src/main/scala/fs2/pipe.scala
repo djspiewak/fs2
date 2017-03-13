@@ -1,8 +1,10 @@
 package fs2
 
+import cats.Functor
+import cats.implicits._
+
 import fs2.async.mutable.Queue
-import fs2.util.{Async,Attempt,Free,Functor,Sub1}
-import fs2.util.syntax._
+import fs2.util.{Async,Attempt,Free,Sub1}
 
 /** Generic implementations of common pipes. */
 object pipe {
@@ -216,15 +218,15 @@ object pipe {
    */
   def groupBy[F[_], K, V](f: V => K): Pipe[F, V, (K, Vector[V])] = {
 
-    def go(current: Option[(K, Vector[V])]): 
+    def go(current: Option[(K, Vector[V])]):
         Handle[F, V] => Pull[F, (K, Vector[V]), Unit] = h => {
 
-      h.receiveOption { 
-        case Some((chunk, h)) => 
+      h.receiveOption {
+        case Some((chunk, h)) =>
           val (k1, out) = current.getOrElse((f(chunk(0)), Vector[V]()))
           doChunk(chunk, h, k1, out, Vector.empty)
-        case None => 
-          val l = current.map { case (k1, out) => Pull.output1((k1, out)) } getOrElse Pull.pure(()) 
+        case None =>
+          val l = current.map { case (k1, out) => Pull.output1((k1, out)) } getOrElse Pull.pure(())
           l >> Pull.done
       }
     }

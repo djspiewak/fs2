@@ -1,7 +1,8 @@
 package fs2
 
 import scala.collection.immutable.VectorBuilder
-import fs2.util.{Applicative,Async,Attempt,Catchable,Free,Lub1,RealSupertype,Sub1,~>}
+import cats.Applicative
+import fs2.util.{Async,Attempt,Catchable,Free,Lub1,RealSupertype,Sub1,~>}
 
 /**
  * A stream producing output of type `O` and which may evaluate `F`
@@ -699,6 +700,11 @@ object Stream {
     new Catchable[({ type λ[a] = Stream[F, a] })#λ] {
       def pure[A](a: A): Stream[F,A] = Stream.emit(a)
       def flatMap[A,B](s: Stream[F,A])(f: A => Stream[F,B]): Stream[F,B] = s.flatMap(f)
+      def tailRecM[A,B](a: A)(f: A => Stream[F,Either[A,B]]): Stream[F,B] =
+        f(a).flatMap {
+          case Left(a) => tailRecM(a)(f)
+          case Right(b) => pure(b)
+        }
       def attempt[A](s: Stream[F,A]): Stream[F,Attempt[A]] = s.attempt
       def fail[A](e: Throwable): Stream[F,A] = Stream.fail(e)
     }

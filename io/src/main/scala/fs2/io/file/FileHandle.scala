@@ -5,8 +5,9 @@ package file
 import java.nio.ByteBuffer
 import java.nio.channels.{AsynchronousFileChannel, FileChannel, FileLock}
 
+import cats.implicits._
+
 import fs2.util.{Async,Suspendable}
-import fs2.util.syntax._
 
 /**
  * Provides the ability to read/write/lock/inspect a file in the effect `F`.

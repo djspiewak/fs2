@@ -1,6 +1,9 @@
 package fs2
 package util
 
+import cats.Traverse
+import cats.implicits._
+
 class TraverseSpec extends Fs2Spec {
 
   "Traverse" - {
@@ -13,7 +16,7 @@ class TraverseSpec extends Fs2Spec {
 
     "evaluate effects in left-to-right order (Seq)" in {
       var acc = collection.mutable.ListBuffer[Int]()
-      val result = Traverse[Seq].traverse( 1 to 5 )(n => Task.delay(acc += n))
+      val result = Traverse[Vector].traverse((1 to 5).toVector)(n => Task.delay(acc += n))
       result.unsafeRunSync()
       acc shouldBe Seq(1, 2, 3, 4, 5)
     }

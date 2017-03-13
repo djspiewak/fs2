@@ -1,5 +1,7 @@
 package fs2.util
 
+import cats.Monad
+
 /**
  * Monad which supports capturing a deferred evaluation of a by-name `F[A]`.
  *

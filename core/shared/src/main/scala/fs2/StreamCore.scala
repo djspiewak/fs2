@@ -2,8 +2,9 @@ package fs2
 
 import fs2.internal.Resources
 import fs2.util.{Async,Attempt,Catenable,Free,NonFatal,Sub1,~>,RealSupertype}
-import fs2.util.syntax._
 import StreamCore.{Env,NT,Stack,Token}
+
+import cats.implicits._
 
 private[fs2] sealed trait StreamCore[F[_],O] { self =>
   type O0

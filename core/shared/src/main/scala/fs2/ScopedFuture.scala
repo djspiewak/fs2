@@ -1,7 +1,9 @@
 package fs2
 
-import fs2.util.{Applicative,Async,Functor}
-import fs2.util.syntax._
+import cats.{Applicative,Functor}
+import cats.implicits._
+
+import fs2.util.Async
 
 /**
  * A future that evaluates to a value of type `A` and a `Scope[F,Unit]`.

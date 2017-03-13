@@ -1,15 +1,16 @@
 package fs2
 package io
 
+import scala.concurrent.SyncVar
+
 import java.io.{IOException, InputStream, OutputStream}
+
+import cats.implicits._
 
 import fs2.Chunk.Bytes
 import fs2.async.mutable
 import fs2.util.Async.Change
 import fs2.util._
-import fs2.util.syntax._
-
-import scala.concurrent.SyncVar
 
 private[io] object JavaInputOutputStream {
   def readBytesFromInputStream[F[_]](is: InputStream, buf: Array[Byte])(implicit F: Suspendable[F]): F[Option[Chunk[Byte]]] =

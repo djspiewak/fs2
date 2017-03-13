@@ -1,7 +1,8 @@
 package fs2
 
+import cats.implicits._
+
 import fs2.util.{Async,Attempt}
-import fs2.util.syntax._
 
 /** Provides utilities for working with streams concurrently. */
 object concurrent {

@@ -1,6 +1,8 @@
 package fs2
 package util
 
+import cats.Monad
+
 /**
  * Monad which tracks exceptions thrown during evaluation.
  *
@@ -16,9 +18,10 @@ trait Catchable[F[_]] extends Monad[F] {
 object Catchable {
   def apply[F[_]](implicit F: Catchable[F]): Catchable[F] = F
 
-  implicit val attemptInstance: Catchable[Attempt] = new Catchable[Attempt] {
+  implicit def attemptInstance(implicit F: Monad[({type l[x] = Either[Throwable, x]})#l]): Catchable[Attempt] = new Catchable[Attempt] {
     def pure[A](a: A): Attempt[A] = Right(a)
     def flatMap[A, B](a: Attempt[A])(f: A => Attempt[B]): Attempt[B] = a.flatMap(f)
+    def tailRecM[B, C](b: B)(f: B => Either[Throwable, Either[B, C]]): Either[Throwable, C] = F.tailRecM(b)(f)
     def attempt[A](a: Attempt[A]): Attempt[Attempt[A]] = a match {
       case Right(a) => Right(Right(a))
       case Left(t) => Right(Left(t))

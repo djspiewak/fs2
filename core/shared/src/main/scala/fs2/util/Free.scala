@@ -1,5 +1,6 @@
 package fs2.util
 
+import cats.{Functor,Monad}
 import fs2.internal.Trampoline
 
 /** A specialized free monad which captures exceptions thrown during evaluation. */
@@ -149,5 +150,10 @@ object Free {
     new Monad[({ type f[x] = Free[F,x]})#f] {
       def pure[A](a: A) = Pure(a, true)
       def flatMap[A,B](a: Free[F,A])(f: A => Free[F,B]) = a flatMap f
+      def tailRecM[A,B](a: A)(f: A => Free[F,Either[A,B]]): Free[F,B] =
+        f(a).flatMap {
+          case Left(a) => tailRecM(a)(f)
+          case Right(b) => pure(b)
+        }
     }
 }

@@ -2,9 +2,11 @@ package fs2
 package async
 package mutable
 
+import cats.{Applicative,Functor}
+import cats.implicits._
+
 import fs2.Stream._
-import fs2.util.{Applicative,Async,Functor}
-import fs2.util.syntax._
+import fs2.util.Async
 
 /** Data type of a single value of type `A` that can be read and written in the effect `F`. */
 trait Signal[F[_], A] extends immutable.Signal[F, A] { self =>
@@ -75,7 +77,7 @@ object Signal {
           if (c.previous._3.isEmpty) F.pure(c.map(_._1) -> b)
           else {
             val now = c.now._1 -> c.now._2
-            c.previous._3.toSeq.traverse { case(_, ref) => ref.setPure(now) } >> F.pure(c.map(_._1) -> b)
+            c.previous._3.toVector.traverse { case(_, ref) => ref.setPure(now) } >> F.pure(c.map(_._1) -> b)
           }
         }
       }

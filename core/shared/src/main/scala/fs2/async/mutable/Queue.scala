@@ -2,8 +2,10 @@ package fs2
 package async
 package mutable
 
-import fs2.util.{Async,Functor}
-import fs2.util.syntax._
+import cats.Functor
+import cats.implicits._
+
+import fs2.util.Async
 
 /**
  * Asynchronous queue interface. Operations are all nonblocking in their
