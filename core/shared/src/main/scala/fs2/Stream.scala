@@ -696,8 +696,8 @@ object Stream {
 
   implicit def covaryPurePipe2[F[_],I,I2,O](p: Pipe2[Pure,I,I2,O]): Pipe2[F,I,I2,O] = pipe2.covary[F,I,I2,O](p)
 
-  implicit def streamCatchableInstance[F[_]]: Catchable[({ type λ[a] = Stream[F, a] })#λ] =
-    new Catchable[({ type λ[a] = Stream[F, a] })#λ] {
+  implicit def streamCatchableInstance[F[_]]: Catchable[Stream[F,?]] = 
+    new Catchable[Stream[F,?]] {
       def pure[A](a: A): Stream[F,A] = Stream.emit(a)
       def flatMap[A,B](s: Stream[F,A])(f: A => Stream[F,B]): Stream[F,B] = s.flatMap(f)
       def tailRecM[A,B](a: A)(f: A => Stream[F,Either[A,B]]): Stream[F,B] =
