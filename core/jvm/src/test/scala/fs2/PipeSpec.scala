@@ -3,9 +3,11 @@ package fs2
 import java.util.concurrent.atomic.AtomicLong
 import org.scalacheck.Gen
 
+import cats.effect.IO
+
 import fs2.Stream._
 import fs2.pipe._
-import fs2.util.Async
+import fs2.util.Concurrent
 
 class PipeSpec extends Fs2Spec {
 
@@ -16,14 +18,14 @@ class PipeSpec extends Fs2Spec {
 
       var counter = 0
       val s2 = (s.get ++ Stream.emits(List.fill(n.get + 1)(0))).repeat
-      runLog { s2.evalMap { i => Task.delay { counter += 1; i }}.buffer(n.get).take(n.get + 1) }
+      runLog { s2.evalMap { i => IO { counter += 1; i }}.buffer(n.get).take(n.get + 1) }
       counter shouldBe (n.get * 2)
     }
 
     "bufferAll" in forAll { (s: PureStream[Int]) =>
       runLog { s.get.bufferAll } shouldBe s.get.toVector
       var counter = 0
-      runLog { (s.get ++ s.get).evalMap { i => Task.delay { counter += 1; i } }.bufferAll.take(s.get.toList.size + 1) }
+      runLog { (s.get ++ s.get).evalMap { i => IO { counter += 1; i } }.bufferAll.take(s.get.toList.size + 1) }
       counter shouldBe (s.get.toList.size * 2)
     }
 
@@ -32,7 +34,7 @@ class PipeSpec extends Fs2Spec {
 
       var counter = 0
       val s2 = s.get.map(_.abs)
-      val s3 = (s2 ++ Stream.emit(-1) ++ s2).evalMap { i => Task.delay { counter += 1; i }}
+      val s3 = (s2 ++ Stream.emit(-1) ++ s2).evalMap { i => IO { counter += 1; i }}
       runLog { s3.bufferBy(_ >= 0).take(s.get.toList.size + 2) }
       counter shouldBe (s.get.toList.size * 2 + 1)
     }
@@ -127,9 +129,9 @@ class PipeSpec extends Fs2Spec {
     }
 
     "evalScan" in forAll { (s: PureStream[Int], n: String) =>
-      val f: (String, Int) => Task[String] = (a: String, b: Int) => Task.now(a + b)
+      val f: (String, Int) => IO[String] = (a: String, b: Int) => IO.pure(a + b)
       val g = (a: String, b: Int) => a + b
-      runLog(s.get.covary[Task].evalScan[Task, String](n)(f)) shouldBe runLog(s.get).scanLeft(n)(g)
+      runLog(s.get.covary[IO].evalScan[IO, String](n)(f)) shouldBe runLog(s.get).scanLeft(n)(g)
     }
 
     "exists" in forAll { (s: PureStream[Int], n: SmallPositive) =>
@@ -240,15 +242,15 @@ class PipeSpec extends Fs2Spec {
     }
 
     "prefetch" in forAll { (s: PureStream[Int]) =>
-      runLog(s.get.covary[Task].through(prefetch)) shouldBe runLog(s.get)
+      runLog(s.get.covary[IO].through(prefetch)) shouldBe runLog(s.get)
     }
 
     "prefetch (timing)" in {
       // should finish in about 3-4 seconds
       val s = Stream(1,2,3)
-            . evalMap(i => Task.delay { Thread.sleep(1000); i })
+            . evalMap(i => IO { Thread.sleep(1000); i })
             . through(prefetch)
-            . flatMap { i => Stream.eval(Task.delay { Thread.sleep(1000); i}) }
+            . flatMap { i => Stream.eval(IO { Thread.sleep(1000); i}) }
       val start = System.currentTimeMillis
       runLog(s)
       val stop = System.currentTimeMillis
@@ -318,9 +320,9 @@ class PipeSpec extends Fs2Spec {
     }
 
     "scanF" in forAll { (s: PureStream[Int], n: String) =>
-      val f: (String, Int) => Task[String] = (a: String, b: Int) => Task.now(a + b)
+      val f: (String, Int) => IO[String] = (a: String, b: Int) => IO.pure(a + b)
       val g = (a: String, b: Int) => a + b
-      runLog(s.get.covary[Task].scanF[Task, String](n)(f)) shouldBe runLog(s.get).scanLeft(n)(g)
+      runLog(s.get.covary[IO].scanF[IO, String](n)(f)) shouldBe runLog(s.get).scanLeft(n)(g)
     }
 
     "shiftRight" in forAll { (s: PureStream[Int], v: Vector[Int]) =>
@@ -407,15 +409,15 @@ class PipeSpec extends Fs2Spec {
         forAll { (s: PureStream[Int]) =>
           val sum = new AtomicLong(0)
           val out = runLog {
-            pipe.observe(s.get.covary[Task]) {
-              _.evalMap(i => Task.delay { sum.addAndGet(i.toLong); () })
+            pipe.observe(s.get.covary[IO]) {
+              _.evalMap(i => IO { sum.addAndGet(i.toLong); () })
             }
           }
           out.map(_.toLong).sum shouldBe sum.get
           sum.set(0)
           val out2 = runLog {
-            pipe.observeAsync(s.get.covary[Task], maxQueued = 10) {
-              _.evalMap(i => Task.delay { sum.addAndGet(i.toLong); () })
+            pipe.observeAsync(s.get.covary[IO], maxQueued = 10) {
+              _.evalMap(i => IO { sum.addAndGet(i.toLong); () })
             }
           }
           out2.map(_.toLong).sum shouldBe sum.get
@@ -424,31 +426,31 @@ class PipeSpec extends Fs2Spec {
       "handle errors from observing sink" in {
         forAll { (s: PureStream[Int]) =>
           runLog {
-            pipe.observe(s.get.covary[Task]) { _ => Stream.fail(Err) }.attempt
+            pipe.observe(s.get.covary[IO]) { _ => Stream.fail(Err) }.attempt
           } should contain theSameElementsAs Left(Err) +: s.get.toVector.map(Right(_))
           runLog {
-            pipe.observeAsync(s.get.covary[Task], 2) { _ => Stream.fail(Err) }.attempt
+            pipe.observeAsync(s.get.covary[IO], 2) { _ => Stream.fail(Err) }.attempt
           } should contain theSameElementsAs Left(Err) +: s.get.toVector.map(Right(_))
         }
       }
       "handle finite observing sink" in {
         forAll { (s: PureStream[Int]) =>
           runLog {
-            pipe.observe(s.get.covary[Task]) { _ => Stream.empty }
+            pipe.observe(s.get.covary[IO]) { _ => Stream.empty }
           } should contain theSameElementsAs s.get.toVector
           runLog {
-            pipe.observe(s.get.covary[Task]) { _.take(2).drain }
+            pipe.observe(s.get.covary[IO]) { _.take(2).drain }
           } should contain theSameElementsAs s.get.toVector
           runLog {
-            pipe.observeAsync(s.get.covary[Task], 2) { _ => Stream.empty }
+            pipe.observeAsync(s.get.covary[IO], 2) { _ => Stream.empty }
           } should contain theSameElementsAs s.get.toVector
         }
       }
       "handle multiple consecutive observations" in {
         forAll { (s: PureStream[Int], f: Failure) =>
           runLog {
-            val sink: Sink[Task,Int] = _.evalMap(i => Task.delay(()))
-            val src: Stream[Task, Int] = s.get.covary[Task]
+            val sink: Sink[IO,Int] = _.evalMap(i => IO(()))
+            val src: Stream[IO, Int] = s.get.covary[IO]
             src.observe(sink).observe(sink)
           } shouldBe s.get.toVector
         }
@@ -457,8 +459,8 @@ class PipeSpec extends Fs2Spec {
         forAll { (s: PureStream[Int], f: Failure) =>
           swallow {
             runLog {
-              val sink: Sink[Task,Int] = in => spuriousFail(in.evalMap(i => Task.delay(i)), f).map(_ => ())
-              val src: Stream[Task, Int] = spuriousFail(s.get.covary[Task], f)
+              val sink: Sink[IO,Int] = in => spuriousFail(in.evalMap(i => IO(i)), f).map(_ => ())
+              val src: Stream[IO, Int] = spuriousFail(s.get.covary[IO], f)
               src.observe(sink).observe(sink)
             } shouldBe s.get.toVector
           }
@@ -468,15 +470,15 @@ class PipeSpec extends Fs2Spec {
 
     "sanity-test" in {
       val s = Stream.range(0,100)
-      val s2 = s.covary[Task].flatMap { i => Stream.emit(i).onFinalize(Task.delay { println(s"finalizing $i")}) }
-      val q = async.unboundedQueue[Task,Int].unsafeRun()
+      val s2 = s.covary[IO].flatMap { i => Stream.emit(i).onFinalize(IO { println(s"finalizing $i")}) }
+      val q = async.unboundedQueue[IO,Int].unsafeRunSync()
       runLog { merge2(trace("s2")(s2), trace("q")(q.dequeue)).take(10) } shouldBe Vector(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
     }
   }
 
   def trace[F[_],A](msg: String)(s: Stream[F,A]) = s mapChunks { a => println(msg + ": " + a.toList); a }
 
-  def merge2[F[_]:Async,A](a: Stream[F,A], a2: Stream[F,A]): Stream[F,A] = {
+  def merge2[F[_]:Concurrent,A](a: Stream[F,A], a2: Stream[F,A]): Stream[F,A] = {
     type FS = ScopedFuture[F,Stream[F,A]] // Option[Step[Chunk[A],Stream[F,A]]]]
     def go(fa: FS, fa2: FS): Stream[F,A] = (fa race fa2).stream.flatMap {
       case Left(sa) => sa.uncons.flatMap {

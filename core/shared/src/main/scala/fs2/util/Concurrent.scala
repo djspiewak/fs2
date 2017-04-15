@@ -41,7 +41,8 @@ trait Concurrent[F[_]] extends Effect[F] { self =>
    */
   def start[A](f: F[A]): F[F[A]] =
     flatMap(ref[A]) { ref =>
-    flatMap(ref.set(f)) { _ => pure(ref.get) }}
+      map(ref.set(f)) { _ => ref.get }
+    }
 
   def unsafeRunAsync[A](fa: F[A])(f: Either[Throwable, A] => IO[Unit]): Unit
 }
@@ -140,8 +141,8 @@ object Concurrent {
   }
 
   def mk[F[_]](F: Effect[F])(implicit ec: ExecutionContext): Concurrent[F] = {
-    trait MsgId
-    trait Msg[A]
+    final class MsgId
+    sealed abstract class Msg[A]
     object Msg {
       final case class Read[A](cb: Attempt[(A, Long)] => Unit, id: MsgId) extends Msg[A]
       final case class Nevermind[A](id: MsgId, cb: Attempt[Boolean] => Unit) extends Msg[A]
@@ -159,7 +160,8 @@ object Concurrent {
       def tailRecM[A, B](a: A)(f: A => F[Either[A, B]]): F[B] = F.tailRecM(a)(f)
       def liftIO[A](ioa: IO[A]): F[A] = F.liftIO(ioa)
       def suspend[A](thunk: => F[A]): F[A] = F.suspend(thunk)
-      def unsafeRunAsync[A](fa: F[A])(f: Either[Throwable, A] => IO[Unit]): Unit = F.runAsync(fa)(f).shift(ec).unsafeRunSync
+      def unsafeRunAsync[A](fa: F[A])(f: Either[Throwable, A] => IO[Unit]): Unit =
+        F.runAsync(F.shift(fa)(ec))(f).unsafeRunSync
       def ref[A]: F[Concurrent.Ref[F,A]] = F.delay {
         var result: Attempt[A] = null
         // any waiting calls to `access` before first `set`
@@ -210,7 +212,7 @@ object Concurrent {
           implicit val F: Concurrent[F] = self
 
           def access: F[(A, Attempt[A] => F[Boolean])] =
-            F.delay(new MsgId {}).flatMap { mid =>
+            F.delay(new MsgId).flatMap { mid =>
               getStamped(mid).map { case (a, id) =>
                 val set = (a: Attempt[A]) =>
                   F.async[Boolean] { cb => actor ! Msg.TrySet(id, a, cb) }
@@ -223,17 +225,17 @@ object Concurrent {
            * When it completes it overwrites any previously `put` value.
            */
           def set(t: F[A]): F[Unit] =
-            F.delay { ec.executeThunk { F.runAsync(t)(r => IO(actor ! Msg.Set(r))).unsafeRunSync }}
+            F.delay { F.runAsync(F.shift(t)(ec)) { r => IO(actor ! Msg.Set(r)) }.unsafeRunSync }
 
           private def getStamped(msg: MsgId): F[(A,Long)] =
             F.async[(A,Long)] { cb => actor ! Msg.Read(cb, msg) }
 
           /** Return the most recently completed `set`, or block until a `set` value is available. */
-          override def get: F[A] = F.delay(new MsgId {}).flatMap { mid => getStamped(mid).map(_._1) }
+          override def get: F[A] = F.delay(new MsgId).flatMap { mid => getStamped(mid).map(_._1) }
 
           /** Like `get`, but returns a `F[Unit]` that can be used cancel the subscription. */
           def cancellableGet: F[(F[A], F[Unit])] = F.delay {
-            val id = new MsgId {}
+            val id = new MsgId
             val get = getStamped(id).map(_._1)
             val cancel = F.async[Unit] {
               cb => actor ! Msg.Nevermind(id, r => cb(r.map(_ => ())))
@@ -260,8 +262,8 @@ object Concurrent {
                 actor ! Msg.Set(res)
               }
             }
-            F.runAsync(t1)(res => IO(win(res))).shift(ec).unsafeRunSync
-            F.runAsync(t2)(res => IO(win(res))).shift(ec).unsafeRunSync
+            unsafeRunAsync(t1)(res => IO(win(res)))
+            unsafeRunAsync(t2)(res => IO(win(res)))
           }
         }
       }

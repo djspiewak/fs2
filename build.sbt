@@ -42,6 +42,8 @@ lazy val commonSettings = Seq(
   initialCommands := s"""
     import fs2._
     import fs2.util._
+    import cats.effect.IO
+    import scala.concurrent.ExecutionContext.Implicits.global
   """,
   doctestWithDependencies := false,
   doctestTestFramework := DoctestTestFramework.ScalaTest
@@ -172,7 +174,7 @@ lazy val core = crossProject.in(file("core")).
     name := "fs2-core",
     libraryDependencies ++= Seq(
       "org.typelevel" %%% "cats-core" % "0.9.0",
-      "cats-effect" %%% "cats-effect" % "0.1-04c03ec"
+      "cats-effect" %%% "cats-effect" % "0.1-756fde7"
     )
   ).
   jsSettings(commonJsSettings: _*)
