@@ -13,7 +13,7 @@ class StreamSpec extends Fs2Spec with Inside {
     }
 
     "fail (1)" in forAll { (f: Failure) =>
-      an[Err.type] should be thrownBy f.get.run.unsafeRun()
+      an[Err.type] should be thrownBy f.get.run.unsafeRunSync()
     }
 
     "fail (2)" in {
