@@ -42,6 +42,8 @@ trait Concurrent[F[_]] extends Effect[F] { self =>
   def start[A](f: F[A]): F[F[A]] =
     flatMap(ref[A]) { ref =>
     flatMap(ref.set(f)) { _ => pure(ref.get) }}
+
+  def unsafeRunAsync[A](fa: F[A])(f: Either[Throwable, A] => IO[Unit]): Unit
 }
 
 object Concurrent {
@@ -157,6 +159,7 @@ object Concurrent {
       def tailRecM[A, B](a: A)(f: A => F[Either[A, B]]): F[B] = F.tailRecM(a)(f)
       def liftIO[A](ioa: IO[A]): F[A] = F.liftIO(ioa)
       def suspend[A](thunk: => F[A]): F[A] = F.suspend(thunk)
+      def unsafeRunAsync[A](fa: F[A])(f: Either[Throwable, A] => IO[Unit]): Unit = F.runAsync(fa)(f).shift(ec).unsafeRunSync
       def ref[A]: F[Concurrent.Ref[F,A]] = F.delay {
         var result: Attempt[A] = null
         // any waiting calls to `access` before first `set`
@@ -257,8 +260,8 @@ object Concurrent {
                 actor ! Msg.Set(res)
               }
             }
-            F.runAsync(t1)(res => IO(win(res))).unsafeRunSync
-            F.runAsync(t2)(res => IO(win(res))).unsafeRunSync
+            F.runAsync(t1)(res => IO(win(res))).shift(ec).unsafeRunSync
+            F.runAsync(t2)(res => IO(win(res))).shift(ec).unsafeRunSync
           }
         }
       }

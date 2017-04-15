@@ -41,12 +41,12 @@ package object time {
           // Note: we guard execution here because slow systems that are biased towards
           // scheduler threads can result in run away submission to the execution context.
           // This has happened with Scala.js, where the scheduler is backed by setInterval
-          // and appears to be given priority over the tasks submitted to unsafeRunSync.
+          // and appears to be given priority over the tasks submitted to unsafeRunAsync.
           val running = new java.util.concurrent.atomic.AtomicBoolean(false)
           val cancel = scheduler.scheduleAtFixedRate(d) {
             if (running.compareAndSet(false, true)) {
               val d = FiniteDuration(System.nanoTime, NANOSECONDS) - t0
-              F.runAsync(signal.set(d))(_ => IO(running.set(false))).unsafeRunSync
+              F.unsafeRunAsync(signal.set(d))(_ => IO(running.set(false)))
             }
           }
           (F.delay(cancel()), signal)

@@ -103,7 +103,7 @@ private[io] object JavaInputOutputStream {
       , dnState: mutable.Signal[F,DownStreamState]
     )(implicit F: Concurrent[F]):Unit = {
       val done = new SyncVar[Attempt[Unit]]
-      F.runAsync(close(upState,dnState)) { r => IO(done.put(r)) }.unsafeRunSync
+      F.unsafeRunAsync(close(upState,dnState)) { r => IO(done.put(r)) }
       done.get.fold(throw _, identity)
     }
 
@@ -125,7 +125,7 @@ private[io] object JavaInputOutputStream {
       , dnState: mutable.Signal[F,DownStreamState]
     )(implicit F: Concurrent[F]):Int = {
       val sync = new SyncVar[Attempt[Int]]
-      F.runAsync(readOnce[F](dest,off,len,queue,dnState))(r => IO(sync.put(r))).unsafeRunSync
+      F.unsafeRunAsync(readOnce[F](dest,off,len,queue,dnState))(r => IO(sync.put(r)))
       sync.get.fold(throw _, identity)
     }
 
@@ -152,7 +152,7 @@ private[io] object JavaInputOutputStream {
       }
 
       val sync = new SyncVar[Attempt[Int]]
-      F.runAsync(go(Array.ofDim(1)))(r => IO(sync.put(r))).unsafeRunSync
+      F.unsafeRunAsync(go(Array.ofDim(1)))(r => IO(sync.put(r)))
       sync.get.fold(throw _, identity)
     }
 
@@ -218,15 +218,9 @@ private[io] object JavaInputOutputStream {
                     case _ => F.pure(copy.size)
                   }}
               }
-
-
           }
-
-
       }
-
     }
-
 
     /**
       * Closes input stream and awaits completion of the upstream

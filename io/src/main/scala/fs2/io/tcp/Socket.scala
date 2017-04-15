@@ -112,9 +112,9 @@ protected[tcp] object Socket {
     def connect(ch: AsynchronousSocketChannel): F[AsynchronousSocketChannel] = F.async { cb =>
       ch.connect(to, null, new CompletionHandler[Void, Void] {
         def completed(result: Void, attachment: Void): Unit =
-          F.runAsync(F.delay(cb(Right(ch))))(_ => IO.pure(())).unsafeRunSync
+          F.unsafeRunAsync(F.delay(cb(Right(ch))))(_ => IO.pure(()))
         def failed(rsn: Throwable, attachment: Void): Unit =
-          F.runAsync(F.delay(cb(Left(rsn))))(_ => IO.pure(())).unsafeRunSync
+          F.unsafeRunAsync(F.delay(cb(Left(rsn))))(_ => IO.pure(()))
       })
     }
 
@@ -154,9 +154,9 @@ protected[tcp] object Socket {
             F.async[AsynchronousSocketChannel] { cb =>
               sch.accept(null, new CompletionHandler[AsynchronousSocketChannel, Void] {
                 def completed(ch: AsynchronousSocketChannel, attachment: Void): Unit =
-                  F.runAsync(F.delay(cb(Right(ch))))(_ => IO.pure(())).unsafeRunSync
+                  F.unsafeRunAsync(F.delay(cb(Right(ch))))(_ => IO.pure(()))
                 def failed(rsn: Throwable, attachment: Void): Unit =
-                  F.runAsync(F.delay(cb(Left(rsn))))(_ => IO.pure(())).unsafeRunSync
+                  F.unsafeRunAsync(F.delay(cb(Left(rsn))))(_ => IO.pure(()))
               })
             }
 
@@ -193,10 +193,10 @@ protected[tcp] object Socket {
         ch.read(buff, timeoutMs, TimeUnit.MILLISECONDS, (), new CompletionHandler[Integer, Unit] {
           def completed(result: Integer, attachment: Unit): Unit = {
             val took = System.currentTimeMillis() - started
-            F.runAsync(F.delay(cb(Right((result, took)))))(_ => IO.pure(())).unsafeRunSync
+            F.unsafeRunAsync(F.delay(cb(Right((result, took)))))(_ => IO.pure(()))
           }
           def failed(err: Throwable, attachment: Unit): Unit =
-            F.runAsync(F.delay(cb(Left(err))))(_ => IO.pure(())).unsafeRunSync
+            F.unsafeRunAsync(F.delay(cb(Left(err))))(_ => IO.pure(()))
         })
       }
 
@@ -265,13 +265,13 @@ protected[tcp] object Socket {
             val start = System.currentTimeMillis()
             ch.write(buff, remains, TimeUnit.MILLISECONDS, (), new CompletionHandler[Integer, Unit] {
               def completed(result: Integer, attachment: Unit): Unit = {
-                F.runAsync(F.delay(cb(Right(
+                F.unsafeRunAsync(F.delay(cb(Right(
                   if (buff.remaining() <= 0) None
                   else Some(System.currentTimeMillis() - start)
-                ))))(_ => IO.pure(())).unsafeRunSync
+                ))))(_ => IO.pure(()))
               }
               def failed(err: Throwable, attachment: Unit): Unit =
-                F.runAsync(F.delay(cb(Left(err))))(_ => IO.pure(())).unsafeRunSync
+                F.unsafeRunAsync(F.delay(cb(Left(err))))(_ => IO.pure(()))
             })
           }.flatMap {
             case None => F.pure(())
