@@ -6,12 +6,10 @@ import cats.implicits._
 import cats.effect.{ Effect, IO }
 
 import fs2.internal.{Actor,LinkedMap}
-// import fs2.util.{Async,Attempt,Effect,ExecutionContexts,NonFatal}
-// import ExecutionContexts._
+import ExecutionContexts._
 import java.util.concurrent.atomic.{AtomicBoolean,AtomicReference}
 
 import scala.concurrent.ExecutionContext
-// import scala.concurrent.duration._
 
 /**
  * Type class which describes effects that support asynchronous evaluation.
@@ -173,7 +171,7 @@ object Concurrent {
             } else {
               val r = result
               val id = nonce
-              F.runAsync(F.delay(cb(r.map((_,id)))))(_ => IO.pure(())).unsafeRunSync
+              ec.executeThunk { cb(r.map((_,id))) }
             }
 
           case Msg.Set(r) =>
@@ -181,7 +179,7 @@ object Concurrent {
             if (result eq null) {
               val id = nonce
               waiting.values.foreach { cb =>
-                F.runAsync(F.delay(cb(r.map((_,id)))))(_ => IO.pure(())).unsafeRunSync
+                ec.executeThunk { cb(r.map((_,id))) }
               }
               waiting = LinkedMap.empty
             }
@@ -191,7 +189,7 @@ object Concurrent {
             if (id == nonce) {
               nonce += 1L; val id2 = nonce
               waiting.values.foreach { cb =>
-                F.runAsync(F.delay(cb(r.map((_,id2)))))(_ => IO.pure(())).unsafeRunSync
+                ec.executeThunk { cb(r.map((_,id2))) }
               }
               waiting = LinkedMap.empty
               result = r
@@ -202,7 +200,7 @@ object Concurrent {
           case Msg.Nevermind(id, cb) =>
             val interrupted = waiting.get(id).isDefined
             waiting = waiting - id
-            F.runAsync(F.delay(cb(Right(interrupted))))(_ => IO.pure(())).unsafeRunSync
+            ec.executeThunk { cb(Right(interrupted)) }
         }
 
         new Ref[F, A] {
@@ -222,7 +220,7 @@ object Concurrent {
            * When it completes it overwrites any previously `put` value.
            */
           def set(t: F[A]): F[Unit] =
-            F.delay(F.runAsync(t)(r => IO(actor ! Msg.Set(r))).unsafeRunSync)
+            F.delay { ec.executeThunk { F.runAsync(t)(r => IO(actor ! Msg.Set(r))).unsafeRunSync }}
 
           private def getStamped(msg: MsgId): F[(A,Long)] =
             F.async[(A,Long)] { cb => actor ! Msg.Read(cb, msg) }
