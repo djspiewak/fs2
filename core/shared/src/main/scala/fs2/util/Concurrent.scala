@@ -225,7 +225,7 @@ object Concurrent {
            * When it completes it overwrites any previously `put` value.
            */
           def set(t: F[A]): F[Unit] =
-            F.delay { F.runAsync(F.shift(t)(ec)) { r => IO(actor ! Msg.Set(r)) }.unsafeRunSync }
+            F.liftIO(F.runAsync(F.shift(t)(ec)) { r => IO(actor ! Msg.Set(r)) })
 
           private def getStamped(msg: MsgId): F[(A,Long)] =
             F.async[(A,Long)] { cb => actor ! Msg.Read(cb, msg) }
