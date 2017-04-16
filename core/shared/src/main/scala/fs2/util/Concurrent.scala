@@ -176,7 +176,7 @@ object Concurrent {
             } else {
               val r = result
               val id = nonce
-              ec.executeThunk { cb(r.map((_,id))) }
+              ec.executeThunk { cb((r: Either[Throwable, A]).map((_,id))) }
             }
 
           case Msg.Set(r) =>
@@ -184,7 +184,7 @@ object Concurrent {
             if (result eq null) {
               val id = nonce
               waiting.values.foreach { cb =>
-                ec.executeThunk { cb(r.map((_,id))) }
+                ec.executeThunk { cb((r: Either[Throwable, A]).map((_,id))) }
               }
               waiting = LinkedMap.empty
             }
@@ -194,7 +194,7 @@ object Concurrent {
             if (id == nonce) {
               nonce += 1L; val id2 = nonce
               waiting.values.foreach { cb =>
-                ec.executeThunk { cb(r.map((_,id2))) }
+                ec.executeThunk { cb((r: Either[Throwable, A]).map((_,id2))) }
               }
               waiting = LinkedMap.empty
               result = r
@@ -238,7 +238,7 @@ object Concurrent {
             val id = new MsgId
             val get = getStamped(id).map(_._1)
             val cancel = F.async[Unit] {
-              cb => actor ! Msg.Nevermind(id, r => cb(r.map(_ => ())))
+              cb => actor ! Msg.Nevermind(id, r => cb((r: Either[Throwable, Boolean]).map(_ => ())))
             }
             (get, cancel)
           }
